@@ -1,2 +1,2 @@
 # Anime Planet Desktop Client
-## Do NOT run this program. Sothis has threatned to ban people using the private api (well it's not that private, anyone can see what I've added). Only run if you are willing to loose your AP account. Go here https://myanimelist.net/forum/?topicid=135910&show=100#msg48414028 to get info on transfering to AP.
+## Before you run this export your anime to mal with [this](https://github.com/SalamanderSandwich/ap2mal/), using this program runs the risk of being banned from ap.
