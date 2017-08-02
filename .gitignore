@@ -82,3 +82,7 @@ $RECYCLE.BIN/
 Debug/
 Release/
 .vs/
+
+# Personal files
+ap.*
+temp.html

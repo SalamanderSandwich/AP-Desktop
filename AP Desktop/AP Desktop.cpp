@@ -18,13 +18,11 @@
 //spell check
 //make url appear (maybe a setting to hide it) (like a file named debug)
 //make title appear every time
-//program doesn't need to close for "login error" it should just call the info loop at the start.
-//after login "Anime Recommendations, Reviews, Manga and More!"
+//data to memory not file
 
 using namespace std;
 
 CURL *curl;
-string currentLoc;
 
 void curlSetup()
 {
@@ -43,8 +41,8 @@ string cleanHTMLText(string s)
 {
 	const int ARRAY_LENGTH = 7;
 	//squiggles are the html code, translation is the actual text 
-	string htmlSquiggles[] = { "&rsquo;","&quot;","&lsquo;","&ldquo;","&rdquo;","&ndash;","&hellip;" };
-	string translation[] = { "’","\"","‘","\"","\"","-","..." };
+	string htmlSquiggles[] = { "&amp;nbsp;","&rsquo;","&quot;","&lsquo;","&ldquo;","&rdquo;","&ndash;","&hellip;" };
+	string translation[] = { " ","’","\"","‘","\"","\"","-","..."};
 	for (int x = 0; x<ARRAY_LENGTH; x++)//for every element
 	{
 		size_t codeCheck = 0;
@@ -100,12 +98,64 @@ string convertInt(int number)
 	return ss.str();//return a string with the contents of the stream
 }
 
-void doSetup()//i'm a very bad programer
+string getSessionID()
 {
-	string userName, passWord, command, sessionID;
-	bool leave = false;
-	for (; leave == false;)
+	string sessionID = "-1";
+	fstream temp("temp.html");
+	string tempLine;
+	smatch m;
+	regex expression("submitFauxForm.+value=\"");
+	while (getline(temp, tempLine))
 	{
+		while (regex_search(tempLine, m, expression))
+		{
+			size_t last = m.suffix().str().find("\"");
+			sessionID = m.suffix().str().substr(0, last);
+			break;
+		}
+	}
+	temp.close();
+	return sessionID;
+}
+
+int main(int argc, char* argv[])
+{
+	curlSetup();
+	string sessionID="-1";
+	fstream cookieCheck("ap.cookie");
+	if (cookieCheck)
+	{
+		cout << "Checking cookie... ";
+		curl_easy_setopt(curl, CURLOPT_COOKIEFILE, "ap.cookie");
+		downloadFile("https://www.anime-planet.com/contact");
+		sessionID = getSessionID();
+	}
+	fstream login("ap.login");
+	if (sessionID == "-1" && login)
+	{
+		string userName, passWord;
+		getline(login, userName);
+		getline(login, passWord);
+		cout << "Trying login info... ";
+		string postData = "username=" + userName + "&password=" + passWord;
+		curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, (long)postData.size());
+		curl_easy_setopt(curl, CURLOPT_POSTFIELDS, postData.c_str());
+		curl_easy_setopt(curl, CURLOPT_COOKIEJAR, "ap.cookie");
+		curl_easy_setopt(curl, CURLOPT_REFERER, "https://www.anime-planet.com/login.php");
+		downloadFile("https://www.anime-planet.com/login.php");
+		curl_easy_cleanup(curl);
+		curlSetup();
+		curl_easy_setopt(curl, CURLOPT_COOKIEFILE, "ap.cookie");
+		sessionID = getSessionID();
+		if (sessionID == "-1")
+		{
+			cout << "login error" << endl;
+		}
+	}
+	
+	while (sessionID == "-1")
+	{
+		string userName, passWord;
 		ofstream addLogin("ap.login");
 		cout << "Please input your Username: ";
 		cin >> userName;
@@ -117,140 +167,30 @@ void doSetup()//i'm a very bad programer
 		curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, (long)postData.size());
 		curl_easy_setopt(curl, CURLOPT_POSTFIELDS, postData.c_str());
 		curl_easy_setopt(curl, CURLOPT_COOKIEJAR, "ap.cookie");
+		curl_easy_setopt(curl, CURLOPT_REFERER, "https://www.anime-planet.com/login.php");
 		downloadFile("https://www.anime-planet.com/login.php");
 		curl_easy_cleanup(curl);
 		curlSetup();
 		curl_easy_setopt(curl, CURLOPT_COOKIEFILE, "ap.cookie");
-		fstream temp("temp.html");
-		string tempLine;
-		smatch m;
-		regex expression("submitFauxForm.+value=\"");
-		while (getline(temp, tempLine))
-		{
-			while (regex_search(tempLine, m, expression))
-			{
-				size_t last = m.suffix().str().find("\"");
-				sessionID = m.suffix().str().substr(0, last);
-				leave = true;
-				break;
-			}
-		}
-		if (leave == false)
-		{
-			cout << "Error try again" << endl;
-		}
-		temp.close();
 		addLogin.close();
-	}
-	cin.sync();//clears everything out
-}
-
-int main(int argc, char* argv[])
-{
-	currentLoc = argv[0];
-	size_t last = currentLoc.find_last_of("\\");
-	currentLoc = currentLoc.substr(0, last + 1);
-	//curl_global_init(CURL_GLOBAL_DEFAULT);
-	//curl = curl_easy_init();
-	//curl_easy_setopt(curl, CURLOPT_COOKIEFILE, "");//start cookie jar
-	//curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);//probably unnecessary, but can't really hurt matters
-	//curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);//redirect if needed
-	//curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
-	//curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 1L);
-	//curl_easy_setopt(curl, CURLOPT_CAINFO, "cacert.pem");
-	doSetup();
-	string command;
-	string sessionID;
-	fstream login("ap.login");
-	if (!login)//if file doesn't exist
-	{
-		login.close();//close the file
-		doSetup();//start setup
-	}
-	else
-	{
-		string userName, passWord;
-		bool leave = false;
-		cout << "Logging in... ";
-		fstream cookieCheck("ap.cookie");
-		if (cookieCheck)
+		sessionID = getSessionID();
+		if (sessionID == "-1")
 		{
-			cout << "checking cookie... ";
-			curl_easy_setopt(curl, CURLOPT_COOKIEFILE, "ap.cookie");
-			downloadFile("https://www.anime-planet.com/contact");
-			fstream temp("temp.html");
-			string tempLine;
-			smatch m;
-			regex expression("submitFauxForm.+value=\"");
-			while (getline(temp, tempLine))
-			{
-				while (regex_search(tempLine, m, expression))
-				{
-					size_t last = m.suffix().str().find("\"");
-					sessionID = m.suffix().str().substr(0, last);
-					leave = true;
-					break;
-				}
-			}
-			temp.close();
-		}
-		cookieCheck.close();
-		if (leave == false)
-		{
-			getline(login, userName);
-			getline(login, passWord);
-			cout << "cookie died, using login info... ";
-			string postData = "username=" + userName + "&password=" + passWord;
-			curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, (long)postData.size());
-			curl_easy_setopt(curl, CURLOPT_POSTFIELDS, postData.c_str());
-			curl_easy_setopt(curl, CURLOPT_COOKIEJAR, "ap.cookie");
-			downloadFile("https://www.anime-planet.com/login.php");
-			curl_easy_cleanup(curl);
-			curlSetup();
-			curl_easy_setopt(curl, CURLOPT_COOKIEFILE, "ap.cookie");
-			fstream temp("temp.html");
-			string tempLine;
-			smatch m;
-			regex expression("submitFauxForm.+value=\"");
-			while (getline(temp, tempLine))
-			{
-				while (regex_search(tempLine, m, expression))
-				{
-					size_t last = m.suffix().str().find("\"");
-					sessionID = m.suffix().str().substr(0, last);
-					leave = true;
-					break;
-				}
-			}
-			if (leave == false)
-			{
-				cout << "Login error, please enter your login information." << endl;
-				temp.close();
-				login.close();
-				doSetup();
-			}
-			else
-			{
-				//cout<<"used login info... ";
-			}
-			temp.close();
-			login.close();
-		}
-		else
-		{
-			cout << "cookie good... ";
+			cout << "Login info failed, try again." << endl;
 		}
 	}
 	cout << "done" << endl;
 	string fileLoc = "temp.html";
 	for (;;)
 	{
-		string apUrl;
-		string line;
-		cout << "> ";
+		string apUrl,line;
 		char input[100];
-		cin.getline(input, sizeof(input));
-		line = input;
+		cout << "> ";
+		while (line == "")
+		{
+			cin.getline(input, sizeof(input));
+			line = input;
+		}
 		size_t findUser = line.find("!user ");
 		if (findUser != string::npos)
 		{
@@ -638,11 +578,10 @@ int main(int argc, char* argv[])
 				if (check != string::npos)
 				{
 					//command="start https://www.anime-planet.com/users/review_edit_review.php?anime_id="+dataID;
-					command = "start " + apUrl;
+					string command = "start " + apUrl;
 					system(command.c_str());
 				}
 			}
 		}
 	}
 }
-
