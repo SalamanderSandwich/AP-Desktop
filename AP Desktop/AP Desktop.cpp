@@ -19,6 +19,9 @@
 //make url appear (maybe a setting to hide it) (like a file named debug)
 //make title appear every time
 //data to memory not file
+//switch to quicker api option
+//fix descriptions
+//netsuzou trap no worky
 
 using namespace std;
 
@@ -33,7 +36,8 @@ void curlSetup()
 	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);//redirect if needed
 	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);//verify everything
 	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 1L);//
-	curl_easy_setopt(curl, CURLOPT_CAINFO, "cacert.pem");//certificate list get it from here if you're paranoid https://curl.haxx.se/docs/caextract.html
+	curl_easy_setopt(curl, CURLOPT_CAINFO, "cacert.pem");//certificate list get it from here if you're paranoid ht	tps://curl.haxx.se/docs/caextract.html
+	curl_easy_setopt(curl, CURLOPT_USERAGENT, "Mozilla/5.0");
 }
 
 //Cleans the description from ap
@@ -227,103 +231,62 @@ int main(int argc, char* argv[])
 				useDefault = true;
 			}
 			string animeTitle = line.substr(0, check);
-			string url = "https://www.anime-planet.com/anime/all?name=" + animeTitle;
+			string url = "https://www.anime-planet.com/api/customlists/filter/anime/?filter_mode=anime&page=1&name=" + animeTitle;
 			size_t spaceCheck = 0;
 			for (spaceCheck = url.find(" ", spaceCheck); spaceCheck != string::npos; spaceCheck = url.find(" ", spaceCheck))//find apostrophe
 			{
 				url = url.substr(0, spaceCheck) + "%20" + url.substr(spaceCheck + 1, url.size() - 1 - spaceCheck);
 			}
+			downloadFile("www.google.com");
+			_getch();
+			cout << url;
 			downloadFile(url);
 			ifstream downloadedThing(fileLoc);
 			string currentLine;
 			bool foundIt = false;
-			while (getline(downloadedThing, currentLine) && foundIt == false)
+			if (true)
 			{
-				size_t lookFor = currentLine.find("content='http");//is the default result
-				if (lookFor != string::npos)
+				string currentDataID, currentTitle, currentApUrl, bestDataID;
+				bestDataID = "POOP";
+				size_t currentScore, bestScore;
+				bestScore = 100000000;
+				while (getline(downloadedThing, currentLine))
 				{
-					size_t lookFor2 = currentLine.find("'/>", lookFor);
-					apUrl = currentLine.substr(lookFor + 9, lookFor2 - lookFor - 9);
-					lookFor = currentLine.find("property='og:title'");
-					lookFor += 29;
-					lookFor2 = currentLine.find("'", lookFor);
-					bestAnimeTitle = currentLine.substr(lookFor, lookFor2 - lookFor);
-					while (getline(downloadedThing, currentLine) && foundIt == false)
+					size_t liCheck = currentLine.find("li name");
+					if (liCheck != string::npos)
 					{
-						lookFor = currentLine.find("data-id=");
-						if (lookFor != string::npos)
+						currentDataID = currentLine.substr(currentLine.find('"') + currentLine.find_last_of('"')- currentLine.find('"'));
+						getline(downloadedThing, currentLine);
+						currentTitle = currentLine.substr(currentLine.find("<h5>"), currentLine.find("</h5>"));
+						currentScore = currentTitle.size();
+						size_t check = currentTitle.find(currentTitle);
+						if (check != string::npos)
 						{
-							lookFor += 9;
-							size_t lookFor2 = currentLine.find('"', lookFor);
-							dataID = currentLine.substr(lookFor, lookFor2 - lookFor);
-							foundIt = true;
-						}
+
+							currentScore -= currentTitle.size();
+							if (check == 0)
+							{
+								//cout<<"starts with"<<endl;
+								currentScore /= 2;
+							}
+							if (currentScore<bestScore)
+							{
+								size_t urlP1 = currentLine.find("href") + 2;
+								currentApUrl = currentLine.substr(urlP1, currentLine.find("'", urlP1) - urlP1);
+								//cout<<"winner"<<endl;
+								bestScore = currentScore;
+								bestDataID = currentDataID;
+								apUrl = "www.anime-planet.com" + currentApUrl;
+								//bestAnimeTitle = currentLine.substr(lookFor, lookFor2 - lookFor);
+							}
+						}	
+
 					}
 				}
-				size_t searchLook = currentLine.find("cardDeck");
-				if (searchLook != string::npos)
+				dataID = bestDataID;
+				if (dataID != "POOP")
 				{
-					//cout<<"idaso"<<endl;
-					string currentDataID, currentTitle, currentApUrl;
-					string bestDataID = "POOP";
-					size_t currentScore, bestScore;
-					bestScore = 100000000;
-					while (getline(downloadedThing, currentLine))
-					{
-						lookFor = currentLine.find("tooltip anime");
-						if (lookFor != string::npos)
-						{
-							lookFor += 13;
-							size_t lookFor2 = currentLine.find('"', lookFor);
-							currentDataID = currentLine.substr(lookFor, lookFor2 - lookFor);
-							//cout<<currentDataID<<endl;
-							lookFor = currentLine.find("href=");
-							lookFor += 6;
-							lookFor2 = currentLine.find('"', lookFor);
-							currentApUrl = currentLine.substr(lookFor, lookFor2 - lookFor);
-						}
-						else
-						{
-							lookFor = currentLine.find("<h4>");
-							if (lookFor != string::npos)
-							{
-								lookFor += 4;
-								size_t lookFor2 = currentLine.find("</h4", lookFor);
-								currentTitle = currentLine.substr(lookFor, lookFor2 - lookFor);
-								currentScore = currentTitle.size();
-								currentTitle = lowerCaser(currentTitle);
-								animeTitle = lowerCaser(animeTitle);
-								//cout<<animeTitle.size();
-								//cout<<currentTitle<<endl;
-								size_t check = currentTitle.find(animeTitle);
-								//cout<<"checking"<<endl;
-								if (check != string::npos)
-								{
-									//cout<<"found title"<<endl;
-									currentScore -= animeTitle.size();
-									//cout<<currentScore<<endl;
-									if (check == 0)
-									{
-										//cout<<"starts with"<<endl;
-										currentScore /= 2;
-									}
-									if (currentScore<bestScore)
-									{
-										//cout<<"winner"<<endl;
-										bestScore = currentScore;
-										bestDataID = currentDataID;
-										apUrl = "www.anime-planet.com" + currentApUrl;
-										bestAnimeTitle = currentLine.substr(lookFor, lookFor2 - lookFor);
-									}
-								}
-							}
-						}
-					}
-					dataID = bestDataID;
-					if (dataID != "POOP")
-					{
-						foundIt = true;
-					}
+					foundIt = true;
 				}
 			}
 			if (foundIt == false)
