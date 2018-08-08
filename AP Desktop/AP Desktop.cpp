@@ -19,21 +19,116 @@
 //make url appear (maybe a setting to hide it) (like a file named debug)
 //make title appear every time
 //data to memory not file
+//switch to quicker api option
+//fix descriptions
+//netsuzou trap no worky
 
 using namespace std;
 
 CURL *curl;
+string exeCurrentDir;
+
+struct MemoryStruct {
+	char *memory;
+	size_t size;
+	size_t currentIndex = 0;
+	void reset()
+	{
+		currentIndex = 0;
+	}
+	bool getLine(string *line)
+	{
+		if (currentIndex == size)
+		{
+			currentIndex = 0;
+			return false;
+		}
+		stringstream ss;
+		for (size_t i = currentIndex; i<size; i++)
+		{
+			ss << *(memory + i);
+			if (*(memory + i) == '\n')
+			{
+				currentIndex = i + 1;
+				break;
+			}
+			if (i + 1 == size)
+			{
+				currentIndex = size;
+				break;
+			}
+		}
+		*line = ss.str();
+		return true;
+	}
+};
+
 
 void curlSetup()
 {
 	curl_global_init(CURL_GLOBAL_DEFAULT);
 	curl = curl_easy_init();
-	curl_easy_setopt(curl, CURLOPT_COOKIEFILE, "");//start cookie jar
+	curl_easy_setopt(curl, CURLOPT_COOKIEFILE, "OT.cookie");//start cookie jar
 	curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);//probably unnecessary, but can't really hurt matters
 	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);//redirect if needed
 	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);//verify everything
 	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 1L);//
-	curl_easy_setopt(curl, CURLOPT_CAINFO, "cacert.pem");//certificate list get it from here if you're paranoid https://curl.haxx.se/docs/caextract.html
+	curl_easy_setopt(curl, CURLOPT_CAINFO, exeCurrentDir + "cacert.pem");//certificate list, get it from here if you're paranoid https://curl.haxx.se/docs/caextract.html
+	curl_easy_setopt(curl, CURLOPT_USERAGENT, "Mozilla/5.0");
+	curl_easy_setopt(curl, CURLOPT_POST, 0L);
+}
+
+size_t WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp)
+{
+	size_t realsize = size * nmemb;
+	struct MemoryStruct *mem = (struct MemoryStruct *)userp;
+
+	mem->memory = (char*)realloc(mem->memory, mem->size + realsize + 1);
+	if (mem->memory == NULL) {
+		/* out of memory! */
+		printf("not enough memory (realloc returned NULL)\n");
+		return 0;
+	}
+
+	memcpy(&(mem->memory[mem->size]), contents, realsize);
+	mem->size += realsize;
+	mem->memory[mem->size] = 0;
+
+	return realsize;
+}
+
+MemoryStruct urlToMem(string url, int sleepTime)
+{
+	struct MemoryStruct chunk;
+
+	chunk.memory = (char*)malloc(1);  /* will be grown as needed by the realloc above */
+	chunk.size = 0;    /* no data at this point */
+					   /* specify URL to get */
+	curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+	/* send all data to this function  */
+	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
+	/* we pass our 'chunk' struct to the callback function */
+	curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&chunk);
+
+	/* get it! */
+	CURLcode res = curl_easy_perform(curl);
+	/* check for errors */
+	if (res != CURLE_OK)
+	{
+		fprintf(stderr, "curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
+		_getch();
+		exit(0);
+	}
+	else
+	{
+		Sleep(sleepTime);
+		return chunk;
+	}
+}
+
+MemoryStruct urlToMem(string url)
+{
+	return urlToMem(url, 200);
 }
 
 //Cleans the description from ap
@@ -42,7 +137,7 @@ string cleanHTMLText(string s)
 	const int ARRAY_LENGTH = 7;
 	//squiggles are the html code, translation is the actual text 
 	string htmlSquiggles[] = { "&amp;nbsp;","&rsquo;","&quot;","&lsquo;","&ldquo;","&rdquo;","&ndash;","&hellip;" };
-	string translation[] = { " ","’","\"","‘","\"","\"","-","..."};
+	string translation[] = { " ","'","\"","'","\"","\"","-","..."};
 	for (int x = 0; x<ARRAY_LENGTH; x++)//for every element
 	{
 		size_t codeCheck = 0;
@@ -98,28 +193,28 @@ string convertInt(int number)
 	return ss.str();//return a string with the contents of the stream
 }
 
-string getSessionID()
+string getSessionID(MemoryStruct mem)
 {
 	string sessionID = "-1";
-	fstream temp("temp.html");
 	string tempLine;
 	smatch m;
 	regex expression("submitFauxForm.+value=\"");
-	while (getline(temp, tempLine))
+	while (mem.getLine(&tempLine))
 	{
 		while (regex_search(tempLine, m, expression))
 		{
 			size_t last = m.suffix().str().find("\"");
 			sessionID = m.suffix().str().substr(0, last);
-			break;
+			return sessionID;
 		}
 	}
-	temp.close();
 	return sessionID;
 }
 
 int main(int argc, char* argv[])
 {
+	string mainPath = argv[0];
+	exeCurrentDir = mainPath.substr(0, mainPath.find_last_of('\\') + 1);
 	curlSetup();
 	string sessionID="-1";
 	fstream cookieCheck("ap.cookie");
@@ -127,8 +222,7 @@ int main(int argc, char* argv[])
 	{
 		cout << "Checking cookie... ";
 		curl_easy_setopt(curl, CURLOPT_COOKIEFILE, "ap.cookie");
-		downloadFile("https://www.anime-planet.com/contact");
-		sessionID = getSessionID();
+		sessionID = getSessionID(urlToMem("https://www.anime-planet.com/contact"));
 	}
 	fstream login("ap.login");
 	if (sessionID == "-1" && login)
@@ -142,11 +236,13 @@ int main(int argc, char* argv[])
 		curl_easy_setopt(curl, CURLOPT_POSTFIELDS, postData.c_str());
 		curl_easy_setopt(curl, CURLOPT_COOKIEJAR, "ap.cookie");
 		curl_easy_setopt(curl, CURLOPT_REFERER, "https://www.anime-planet.com/login.php");
-		downloadFile("https://www.anime-planet.com/login.php");
+		MemoryStruct mem = urlToMem("https://www.anime-planet.com/login.php");
 		curl_easy_cleanup(curl);
 		curlSetup();
 		curl_easy_setopt(curl, CURLOPT_COOKIEFILE, "ap.cookie");
-		sessionID = getSessionID();
+		sessionID = getSessionID(mem);
+		cout << sessionID << endl;
+		_getch();
 		if (sessionID == "-1")
 		{
 			cout << "login error" << endl;
@@ -173,7 +269,7 @@ int main(int argc, char* argv[])
 		curlSetup();
 		curl_easy_setopt(curl, CURLOPT_COOKIEFILE, "ap.cookie");
 		addLogin.close();
-		sessionID = getSessionID();
+		//sessionID = getSessionID();
 		if (sessionID == "-1")
 		{
 			cout << "Login info failed, try again." << endl;
@@ -227,103 +323,59 @@ int main(int argc, char* argv[])
 				useDefault = true;
 			}
 			string animeTitle = line.substr(0, check);
-			string url = "https://www.anime-planet.com/anime/all?name=" + animeTitle;
+			string url = "https://www.anime-planet.com/api/customlists/filter/anime/?filter_mode=anime&page=1&name=" + animeTitle;
 			size_t spaceCheck = 0;
 			for (spaceCheck = url.find(" ", spaceCheck); spaceCheck != string::npos; spaceCheck = url.find(" ", spaceCheck))//find apostrophe
 			{
 				url = url.substr(0, spaceCheck) + "%20" + url.substr(spaceCheck + 1, url.size() - 1 - spaceCheck);
 			}
-			downloadFile(url);
-			ifstream downloadedThing(fileLoc);
+			cout << url<<endl;
+			MemoryStruct mem = urlToMem(url);
 			string currentLine;
 			bool foundIt = false;
-			while (getline(downloadedThing, currentLine) && foundIt == false)
+			if (true)
 			{
-				size_t lookFor = currentLine.find("content='http");//is the default result
-				if (lookFor != string::npos)
+				string currentDataID, currentTitle, currentApUrl, bestDataID;
+				bestDataID = "POOP";
+				size_t currentScore, bestScore;
+				bestScore = 100000000;
+				while (mem.getLine(&currentLine))
 				{
-					size_t lookFor2 = currentLine.find("'/>", lookFor);
-					apUrl = currentLine.substr(lookFor + 9, lookFor2 - lookFor - 9);
-					lookFor = currentLine.find("property='og:title'");
-					lookFor += 29;
-					lookFor2 = currentLine.find("'", lookFor);
-					bestAnimeTitle = currentLine.substr(lookFor, lookFor2 - lookFor);
-					while (getline(downloadedThing, currentLine) && foundIt == false)
+					size_t liCheck = currentLine.find("li name");
+					if (liCheck != string::npos)
 					{
-						lookFor = currentLine.find("data-id=");
-						if (lookFor != string::npos)
+						currentDataID = currentLine.substr(currentLine.find('"')+1, currentLine.find_last_of('"')- currentLine.find('"')-1);
+						mem.getLine(&currentLine);
+						currentTitle = currentLine.substr(currentLine.find("<h5>"), currentLine.find("</h5>"));
+						currentScore = currentTitle.size();
+						size_t check = currentTitle.find(currentTitle);
+						if (check != string::npos)
 						{
-							lookFor += 9;
-							size_t lookFor2 = currentLine.find('"', lookFor);
-							dataID = currentLine.substr(lookFor, lookFor2 - lookFor);
-							foundIt = true;
-						}
+
+							currentScore -= currentTitle.size();
+							if (check == 0)
+							{
+								//cout<<"starts with"<<endl;
+								currentScore /= 2;
+							}
+							if (currentScore<bestScore)
+							{
+								size_t urlP1 = currentLine.find("href") + 6;
+								currentApUrl = currentLine.substr(urlP1, currentLine.find("'", urlP1) - urlP1);
+								//cout<<"winner"<<endl;
+								bestScore = currentScore;
+								bestDataID = currentDataID;
+								apUrl = "https://www.anime-planet.com" + currentApUrl;
+								//bestAnimeTitle = currentLine.substr(lookFor, lookFor2 - lookFor);
+							}
+						}	
+
 					}
 				}
-				size_t searchLook = currentLine.find("cardDeck");
-				if (searchLook != string::npos)
+				dataID = bestDataID;
+				if (dataID != "POOP")
 				{
-					//cout<<"idaso"<<endl;
-					string currentDataID, currentTitle, currentApUrl;
-					string bestDataID = "POOP";
-					size_t currentScore, bestScore;
-					bestScore = 100000000;
-					while (getline(downloadedThing, currentLine))
-					{
-						lookFor = currentLine.find("tooltip anime");
-						if (lookFor != string::npos)
-						{
-							lookFor += 13;
-							size_t lookFor2 = currentLine.find('"', lookFor);
-							currentDataID = currentLine.substr(lookFor, lookFor2 - lookFor);
-							//cout<<currentDataID<<endl;
-							lookFor = currentLine.find("href=");
-							lookFor += 6;
-							lookFor2 = currentLine.find('"', lookFor);
-							currentApUrl = currentLine.substr(lookFor, lookFor2 - lookFor);
-						}
-						else
-						{
-							lookFor = currentLine.find("<h4>");
-							if (lookFor != string::npos)
-							{
-								lookFor += 4;
-								size_t lookFor2 = currentLine.find("</h4", lookFor);
-								currentTitle = currentLine.substr(lookFor, lookFor2 - lookFor);
-								currentScore = currentTitle.size();
-								currentTitle = lowerCaser(currentTitle);
-								animeTitle = lowerCaser(animeTitle);
-								//cout<<animeTitle.size();
-								//cout<<currentTitle<<endl;
-								size_t check = currentTitle.find(animeTitle);
-								//cout<<"checking"<<endl;
-								if (check != string::npos)
-								{
-									//cout<<"found title"<<endl;
-									currentScore -= animeTitle.size();
-									//cout<<currentScore<<endl;
-									if (check == 0)
-									{
-										//cout<<"starts with"<<endl;
-										currentScore /= 2;
-									}
-									if (currentScore<bestScore)
-									{
-										//cout<<"winner"<<endl;
-										bestScore = currentScore;
-										bestDataID = currentDataID;
-										apUrl = "www.anime-planet.com" + currentApUrl;
-										bestAnimeTitle = currentLine.substr(lookFor, lookFor2 - lookFor);
-									}
-								}
-							}
-						}
-					}
-					dataID = bestDataID;
-					if (dataID != "POOP")
-					{
-						foundIt = true;
-					}
+					foundIt = true;
 				}
 			}
 			if (foundIt == false)
