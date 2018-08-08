@@ -68,7 +68,7 @@ void curlSetup()
 {
 	curl_global_init(CURL_GLOBAL_DEFAULT);
 	curl = curl_easy_init();
-	curl_easy_setopt(curl, CURLOPT_COOKIEFILE, "OT.cookie");//start cookie jar
+	curl_easy_setopt(curl, CURLOPT_COOKIEFILE, "AP.cookie");//start cookie jar
 	curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);//probably unnecessary, but can't really hurt matters
 	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);//redirect if needed
 	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);//verify everything
