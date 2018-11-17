@@ -68,7 +68,7 @@ void curlSetup()
 {
 	curl_global_init(CURL_GLOBAL_DEFAULT);
 	curl = curl_easy_init();
-	curl_easy_setopt(curl, CURLOPT_COOKIEFILE, "OT.cookie");//start cookie jar
+	curl_easy_setopt(curl, CURLOPT_COOKIEFILE, "AP.cookie");//start cookie jar
 	curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);//probably unnecessary, but can't really hurt matters
 	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);//redirect if needed
 	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);//verify everything
@@ -134,7 +134,7 @@ MemoryStruct urlToMem(string url)
 //Cleans the description from ap
 string cleanHTMLText(string s)
 {
-	const int ARRAY_LENGTH = 7;
+	const int ARRAY_LENGTH = 8;
 	//squiggles are the html code, translation is the actual text 
 	string htmlSquiggles[] = { "&amp;nbsp;","&rsquo;","&quot;","&lsquo;","&ldquo;","&rdquo;","&ndash;","&hellip;" };
 	string translation[] = { " ","'","\"","'","\"","\"","-","..."};
@@ -337,7 +337,7 @@ int main(int argc, char* argv[])
 			{
 				string currentDataID, currentTitle, currentApUrl, bestDataID;
 				bestDataID = "POOP";
-				size_t currentScore, bestScore;
+				int currentScore, bestScore;
 				bestScore = 100000000;
 				while (mem.getLine(&currentLine))
 				{
@@ -346,22 +346,24 @@ int main(int argc, char* argv[])
 					{
 						currentDataID = currentLine.substr(currentLine.find('"')+1, currentLine.find_last_of('"')- currentLine.find('"')-1);
 						mem.getLine(&currentLine);
-						currentTitle = currentLine.substr(currentLine.find("<h5>"), currentLine.find("</h5>"));
-						currentScore = currentTitle.size();
+						currentTitle = currentLine.substr(currentLine.find("<h5>")+4, currentLine.find("</h5>")- currentLine.find("<h5>")-4);
+						currentScore = static_cast<int>(currentTitle.size());
 						size_t check = currentTitle.find(currentTitle);
 						if (check != string::npos)
 						{
 
-							currentScore -= currentTitle.size();
+							//currentScore -= currentTitle.size();
 							if (check == 0)
 							{
 								//cout<<"starts with"<<endl;
 								currentScore /= 2;
 							}
+							//cout << currentTitle << " " << (int)currentScore << endl;
 							if (currentScore<bestScore)
 							{
 								size_t urlP1 = currentLine.find("href") + 6;
 								currentApUrl = currentLine.substr(urlP1, currentLine.find("'", urlP1) - urlP1);
+								//cout << currentApUrl << endl;
 								//cout<<"winner"<<endl;
 								bestScore = currentScore;
 								bestDataID = currentDataID;
